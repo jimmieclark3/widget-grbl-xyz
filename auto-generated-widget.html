@@ -428,7 +428,7 @@ cpdefine("inline:com-chilipeppr-widget-xyz", ["chilipeppr_ready", "jquerycookie"
             //console.log("should we show or hide the touch btn");
             var btnEl = $("#com-chilipeppr-widget-xyz .btnShowTouchJog");
             var btnParentWidth = btnEl.parent().parent().width();
-            var widgetWidth = $("#com-chilipeppr-widget-xyz").width();
+             var widgetWidth = $("#com-chilipeppr-widget-xyz").width();
             console.log("btnParentWidth:", btnParentWidth, "widgetWidth:", widgetWidth);
             //console.log("btnEl:", btnEl, "parent:", btnEl.parent(), "btnEl.parent().width()", btnEl.parent().width(), "btnEl.parent().parent().width()", btnEl.parent().parent().width());
             //console.log("btnEl.parent().parent().width()", btnEl.parent().parent().width(), "btnEl.parent().parent().width()", btnEl.parent().parent().parent().parent().width());
@@ -1121,6 +1121,8 @@ cpdefine("inline:com-chilipeppr-widget-xyz", ["chilipeppr_ready", "jquerycookie"
                 z: this.axisz,
                 a: this.axisa
             }
+			
+			this.setupMemoryButtons();
         },
         updateAxesFromStatus: function (axes) {
             console.log("updateAxesFromStatus:", axes);
@@ -1144,6 +1146,15 @@ cpdefine("inline:com-chilipeppr-widget-xyz", ["chilipeppr_ready", "jquerycookie"
             z: 0,
             a: 0,
         },
+        // keep track of lastval so less dom updates to perform
+        memAxesVal: {
+            x: 0,
+            y: 0,
+            z: 0,
+            a: 0,
+        },
+		last_machine: {},
+		memAxesSet: false,
         updateAxis: function (axis, val) {
             //console.log("updateAxis. axis:", axis, "val:", val);
             var ax = this.axes[axis];
@@ -1253,6 +1264,8 @@ cpdefine("inline:com-chilipeppr-widget-xyz", ["chilipeppr_ready", "jquerycookie"
             console.log("zeroOutAxis28. evt.data:", evt.data, "evt:", evt);
             var cmd = "G28.3 ";
             if (evt.data == "xyz") {
+				this.setMemAxes();
+			
                 cmd += "X0 Y0 Z0";
                 if (this.isAAxisShowing) {
                     cmd += " A0";
@@ -1269,6 +1282,8 @@ cpdefine("inline:com-chilipeppr-widget-xyz", ["chilipeppr_ready", "jquerycookie"
             console.log("zeroOutAxis92. evt.data:", evt.data, "evt:", evt);
             var cmd = "G92 ";
             if (evt.data == "xyz") {
+				this.setMemAxes();
+			
                 cmd += "X0 Y0 Z0";
                 if (this.isAAxisShowing) {
                     cmd += " A0";
@@ -1285,6 +1300,8 @@ cpdefine("inline:com-chilipeppr-widget-xyz", ["chilipeppr_ready", "jquerycookie"
             console.log("zeroOutAxis92. evt.data:", evt.data, "evt:", evt);
             var cmd = "G92.1 ";
             if (evt.data == "xyz") {
+				this.setMemAxes();
+			
                 cmd += "X0 Y0 Z0";
                 if (this.isAAxisShowing) {
                     cmd += " A0";
@@ -1832,6 +1849,74 @@ cpdefine("inline:com-chilipeppr-widget-xyz", ["chilipeppr_ready", "jquerycookie"
             });
 
         },
+		setupMemoryButtons:function() {
+			var that = this;
+            chilipeppr.subscribe('/com-chilipeppr-interface-cnccontroller/last_machine', function(data) {
+				that.last_machine = data;
+			});
+		
+		
+			this.updateMemoryButtons();
+			
+			var that = this;
+			
+			var btnMemStore = $("#com-chilipeppr-widget-xyz-ftr .memstore").click(function() {
+				that.setMemAxes();
+			});
+			var btnMemRecallall = $("#com-chilipeppr-widget-xyz-ftr .memrecallxyz").click(function() {
+				that.recallMemAxes();
+			});
+			var btnMemRecallxy = $("#com-chilipeppr-widget-xyz-ftr .memrecallxy").click(function() {
+				that.recallMemAxesXY();
+			});
+			
+		},
+		updateMemoryButtons: function () {
+			var btnMemStore = $("#com-chilipeppr-widget-xyz-ftr .memstore");
+			var btnMemRecallall = $("#com-chilipeppr-widget-xyz-ftr .memrecallxyz");
+			var btnMemRecallxy = $("#com-chilipeppr-widget-xyz-ftr .memrecallxy");
+			
+			btnMemStore.prop("disabled", false);
+			btnMemRecallall.prop("disabled", !this.memAxesSet);
+			btnMemRecallxy.prop("disabled", !this.memAxesSet);
+		},
+		setMemAxes: function() {
+		
+			this.memAxesSet = true;
+			this.memAxesVal.x = this.last_machine.x;
+			this.memAxesVal.y = this.last_machine.y;
+			this.memAxesVal.z = this.last_machine.z;
+			
+			this.updateMemoryButtons();
+			
+		},
+		recallMemAxes: function() {
+			var rel = this.getWSRelative();
+		
+            var gcode = "G91 G0 X" + rel.x + " Y" + rel.y + " Z" + rel.z + "\n";
+            chilipeppr.publish("/com-chilipeppr-widget-serialport/send", gcode);       
+		},
+		recallMemAxesXY: function() {
+			var rel = this.getWSRelative();
+		
+            var gcode = "G91 G0 X" + rel.x + " Y" + rel.y + "\n";
+            chilipeppr.publish("/com-chilipeppr-widget-serialport/send", gcode);       
+		},
+		
+		getWSRelative: function() {
+		
+			var rx = this.memAxesVal.x - this.last_machine.x;
+			var ry = this.memAxesVal.y - this.last_machine.y;
+			var rz = this.memAxesVal.z - this.last_machine.z;
+			
+			var obj = {};
+			
+			obj.x = rx.toFixed(3);
+			obj.y = ry.toFixed(3);
+			obj.z = rz.toFixed(3);
+			
+			return obj;
+		},
     }
 });
     //]]>
@@ -2232,6 +2317,13 @@ cpdefine("inline:com-chilipeppr-widget-xyz", ["chilipeppr_ready", "jquerycookie"
 
         <table style="">
         <tr>
+            <td class="col xcol-xs-3" style="border:0px red solid;">
+                <div class="btn-group-vertical" style="margin-right:-2px;">
+                    <button class="btn btn-xs btn-default memstore "  data-toggle="popover" data-placement="top" data-title="Work Coordinates Store" data-content="This does a soft reset<br/>Then stores the coordinates of your location<br/>You can then call WR (Work Coordinates Restore) to <br/>soft reset, and got back to work 0" data-html="true" data-delay="500" data-trigger="hover" data-container="body">WS</button>
+                    <button class="btn btn-xs btn-default memrecallxyz" disabled="true" data-toggle="popover" data-placement="top" data-title="Work Coordinates Restore All" data-content="This will soft reset<br/>Then goes back to Work Coordinates<br/>Then zeros out again" data-html="true" data-delay="500" data-trigger="hover" data-container="body" >WR-XYZ</button>
+                    <button class="btn btn-xs btn-default memrecallxy" disabled="true" data-toggle="popover" data-placement="top" data-title="Work Coordinates Restore XY" data-content="This will soft reset<br/>Then goes back to Work Coordinates<br/>Then zeros out again" data-html="true" data-delay="500" data-trigger="hover" data-container="body" >WR-XY</button>
+                </div>
+			</td>
             <td class="col xcol-xs-3" style="border:0px red solid;">
                     <div class="btn-group-vertical">
                         <button class="btn btn-xs btn-default joggotozero " data-toggle="popover" data-placement="top" data-title="Move to Zero Position on All Axes" data-content="G0 X0 Y0 Z0 A0<br/>If you need to go to X0 Y0 first and then Z0, you can use the menus on the axes above." data-html="true" data-delay="500" data-trigger="hover" data-container="body">Go To Zero</button>
